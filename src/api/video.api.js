@@ -6,6 +6,7 @@ export async function listVideos() {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true'
     },
   });
   const jsonResponse = await response.json();
@@ -21,18 +22,21 @@ export async function uploadVideo(formData) {
     body: formData,
   });
   const jsonResponse = await response.json();
-  console.log(jsonResponse);
   return {
     message: jsonResponse.message,
   };
 }
 
-export async function getVideoChunk(name, start, end) {
-  const response = await fetch(`${basePath}/${name}`, {
+export async function getVideoUrl(name,type) {
+  const response = await fetch(`${basePath}/${type}/${name}`, {
     method: 'GET',
     headers: {
-      'Range': `bytes=${start}-${end}`,
+      'ngrok-skip-browser-warning': 'true'
     },
   });
-  return response;
+  const jsonResponse = await response.json();
+  return {
+    message: jsonResponse.message,
+    data: jsonResponse.data,
+  };
 }
