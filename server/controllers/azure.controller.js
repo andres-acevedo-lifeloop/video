@@ -1,5 +1,5 @@
 const { BlobServiceClient } = require('@azure/storage-blob');
-const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
 
 // Replace with your storage account name and SAS token
 const accountName = 'lifeloopvideos';
@@ -10,19 +10,21 @@ const cdnUrl = 'videos-hdd6dtfcevb0eran.z02.azurefd.net'
 // Create a BlobServiceClient
 const blobServiceClient = new BlobServiceClient(`https://${accountName}.blob.core.windows.net?${sasToken}`);
 
-
-async function uploadVideoToAzure(fileBuffer, fileName, mimeType) {
-
+async function uploadVideoToAzure(filePath, fileName, mimeType) {
     // Get a reference to the container
     const containerClient = blobServiceClient.getContainerClient(containerName);
 
     // Create a unique name for the blob
-    const blobName = `${uuidv4()}-${fileName}`;
+    const blobName = `${fileName}`;
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+
+    // Read the file from the file system
+    const fileStream = fs.createReadStream(filePath);
+    const fileSize = fs.statSync(filePath).size;
 
     // Upload the file
     try {
-        await blockBlobClient.uploadData(fileBuffer, {
+        await blockBlobClient.uploadStream(fileStream, fileSize, 5, {
             blobHTTPHeaders: { blobContentType: mimeType }
         });
         console.log(`Upload of ${blobName} successful`);

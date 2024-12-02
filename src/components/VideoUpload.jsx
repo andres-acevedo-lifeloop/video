@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { uploadVideo } from '../api/video.api';
 
-const fileSizeLimit = 10;
+const fileSizeLimit = 100;
 
 export default function VideoUpload({setNeedToLoadVideos, setLoading, loading}) {
     const [selectedFile, setSelectedFile] = useState(null);
@@ -41,6 +41,7 @@ export default function VideoUpload({setNeedToLoadVideos, setLoading, loading}) 
             setUploadMessage(response.message);
             setSelectedFile(null);
             setNeedToLoadVideos(true);
+            fileButton.current.value = '';
         } catch (error) {
             console.error(error);
             setUploadMessage('Video upload failed.');

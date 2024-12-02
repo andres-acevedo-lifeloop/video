@@ -4,17 +4,37 @@ const PORT = 5000;
 const cors = require('cors');
 const { uploadVideoToAzure, listVideos, getVideoUrl } = require('./controllers/azure.controller');
 const multer = require('multer');
+const { resizeVideo, getVideoResolution } = require('./controllers/ffmpeg.controller');
+const path = require('path');
+const fs = require('fs');
 
 app.use(cors());
 
 const baseUrl = '/video';
 
-const fileSizeLimit = 10;
-const storage = multer.memoryStorage();
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: fileSizeLimit * 1024 * 1024 } 
+const fileSizeLimit = 100;
+
+// Configure Multer storage
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/'); // Specify the upload directory
+    },
+    filename: (req, file, cb) => {
+        // Use the original file name
+        const originalName = file.originalname;
+        cb(null, originalName);
+    },
 });
+
+const upload = multer({
+    limits: { fileSize: fileSizeLimit * 1024 * 1024 }, 
+    storage,
+});
+
+const videosDir = path.join(__dirname, 'videos');
+if (!fs.existsSync(videosDir)) {
+    fs.mkdirSync(videosDir);
+}
 
 app.get(`${baseUrl}/list`, (req, res) => {
     listVideos().then((videos) => {
@@ -45,29 +65,32 @@ app.get(`${baseUrl}/cdn/:name`, (req, res) => {
 });
 
 // Endpoint for uploading a video
-app.post(`${baseUrl}/upload`, (req, res) => {
-    upload.single('video')(req, res, async (err) => {
-        if (err && err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(400).json({ message: `File size exceeds ${fileSizeLimit} MB.` });
-        } else if (err) {
-            return res.status(500).json({
-                message: 'Video upload failed'
-            });
-        }
-        if (!req.file) {
-            return res.status(400).json({ message: 'No file uploaded.' });
-        }
-        
-        try { 
-            uploadVideoToAzure(req.file.buffer, req.file.originalname, req.file.mimetype).then(() => {
-                res.status(200).json({message: 'Video uploaded successfully'});
-            });
-        } catch (error) {
-            return res.status(500).json({message: 'Video upload failed'});
-        }
-    });
+app.post(`${baseUrl}/upload`, upload.single('video'), async (req, res) => {
+    const { file } = req; // Uploaded video
 
+    try {
 
+        //Upload the original video to Azure
+        await uploadVideoToAzure(file.path, `${file.fieldname}-original.mp4`, file.mimetype)
+
+        // Resize the video and upload 720p
+        let outputFilePath = path.join(videosDir, `${file.fieldname}-720p.mp4`);
+        await resizeVideo(file.path, outputFilePath, '1280x720');
+        await uploadVideoToAzure(outputFilePath, `${file.fieldname}-720p.mp4`, file.mimetype)
+
+        // Resize the video and upload 480p
+        outputFilePath = path.join(videosDir, `${file.fieldname}-480p.mp4`);
+        await resizeVideo(file.path, outputFilePath, '854x480');
+        await uploadVideoToAzure(outputFilePath, `${file.fieldname}-480p.mp4`, file.mimetype)
+
+        res.json({ message: 'Video resized successfully'});
+    } catch (err) {
+        console.error('Error processing video:', err);
+        res.status(500).send('Error resizing video');
+    } finally {
+        // Clean up the uploaded file
+        fs.unlinkSync(file.path);
+    }
 });
 
 app.listen(PORT, () => {
